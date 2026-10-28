@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#304c3d">
+  <meta name="description" content="走进晨曦矿谷，采集资源、制造设备、完成小镇订单。QKI 矿工小镇免费试玩。">
+  <title>QKI 矿工小镇 · 晨曦矿谷</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%23304c3d'/%3E%3Cpath d='m10 30 15-17m-12-4c8-2 14 2 17 7l-4 3c-3-6-7-8-13-10Z' stroke='%23e6c480' stroke-width='3' fill='none'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/chain.css">
+  <script type="module" src="/app.mjs"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">跳到游戏内容</a>
+  <aside class="sidebar" aria-label="游戏导航">
+    <a class="brand" href="#home" aria-label="QKI 矿工小镇首页"><span id="brand-icon"></span><span>QKI<span class="brand-small">MINING</span></span></a>
+    <div class="nav-caption">我的小镇</div>
+    <nav id="navigation"></nav>
+    <div class="sidebar-bottom">
+      <div class="sidebar-seed"><span id="leaf-icon"></span><span>慢慢来<br>山谷一直都在</span></div>
+      <button class="nav-item" data-action="help"><span id="help-icon"></span><span>试玩说明</span></button>
+      <button class="nav-item" data-action="settings"><span id="settings-icon"></span><span>设置</span></button>
+      <span class="version">QKI MINING · v0.2</span>
+    </div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar">
+      <div class="breadcrumb"><span class="crumb-icon" id="map-icon"></span><span>晨曦矿谷</span><span class="slash">/</span><span id="current-page">我的矿区</span></div>
+      <div class="topbar-actions"><span class="saved-state" id="save-state"></span><button class="demo-pill" data-action="help"><span class="status-dot"></span>玩法说明<span class="pill-info">i</span></button><button class="wallet-button" id="wallet-button" data-chain="open">连接 QKI 钱包</button></div>
+    </header>
+    <main id="main-content" tabindex="-1">
+      <section class="page-heading">
+        <div><div class="eyebrow">A LITTLE WORK. A LITTLE WONDER.</div><h1 id="page-title">早安，矿工<span class="heading-dot">。</span></h1><p id="page-subtitle">新的一天，从山谷里的第一块铜矿开始。</p></div>
+        <div class="player-badge"><div class="miner-avatar"><span class="hat"></span><span class="face"></span><span class="body"></span></div><div><strong>山谷新居民</strong><span id="player-level">矿工等级 LV.01</span></div></div>
+      </section>
+      <div id="mode-bar"></div><section class="resource-strip" id="resources" aria-label="资源仓库"></section>
+      <div class="game-layout"><div class="main-column" id="view-content"></div><aside class="right-column" id="right-content" aria-label="订单和成长进度"></aside></div>
+      <footer class="page-footer"><span>QKI 矿工小镇 <span class="footer-dot">·</span> 让每一份努力，都有回响。</span><span>试玩资源与积分仅用于游戏体验</span></footer>
+    </main>
+  </div>
+  <div class="toast-stack" id="toast-stack" aria-live="polite" aria-atomic="false"></div>
+  <dialog id="game-dialog" aria-labelledby="dialog-title"><div id="dialog-content"></div></dialog>
+  <div id="celebration" aria-hidden="true"></div>
+</body>
+</html>

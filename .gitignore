@@ -1,0 +1,8 @@
+/node_modules/
+/dist/__qa/
+.env
+.env.*
+!.env.example
+coverage/
+*.log
+*.tar.gz
