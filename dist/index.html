@@ -7,10 +7,10 @@
   <meta name="description" content="走进晨曦矿谷，采集资源、制造设备、完成小镇订单。QKI 矿工小镇免费试玩。">
   <title>QKI 矿工小镇 · 晨曦矿谷</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%23304c3d'/%3E%3Cpath d='m10 30 15-17m-12-4c8-2 14 2 17 7l-4 3c-3-6-7-8-13-10Z' stroke='%23e6c480' stroke-width='3' fill='none'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/style.css">
-  <link rel="stylesheet" href="/chain.css">
-  <link rel="stylesheet" href="/rewards.css">
-  <script type="module" src="/app.mjs"></script>
+  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./chain.css">
+  <link rel="stylesheet" href="./rewards.css">
+  <script type="module" src="./app.mjs"></script>
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到游戏内容</a>
@@ -29,7 +29,7 @@
     <header class="topbar">
       <div class="breadcrumb"><span class="crumb-icon" id="map-icon"></span><span>晨曦矿谷</span><span class="slash">/</span><span id="current-page">我的矿区</span></div>
       <div class="topbar-actions">
-        <a class="github-link" href="https://github.com/Bu-Qi/qki-miner-town" target="_blank" rel="noopener noreferrer" title="GitHub 项目仓库 · 需访问权限（新标签页打开）" aria-label="在新标签页打开 GitHub 项目仓库（需访问权限）"><svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M12 .75a11.25 11.25 0 0 0-3.558 21.923c.563.104.77-.244.77-.542 0-.267-.01-.974-.015-1.912-3.13.68-3.79-1.51-3.79-1.51-.511-1.3-1.25-1.646-1.25-1.646-1.022-.7.077-.686.077-.686 1.13.08 1.725 1.16 1.725 1.16 1.005 1.721 2.638 1.224 3.28.936.102-.728.393-1.224.715-1.505-2.5-.285-5.128-1.25-5.128-5.566 0-1.23.44-2.234 1.16-3.021-.116-.285-.503-1.43.11-2.98 0 0 .945-.303 3.094 1.154A10.78 10.78 0 0 1 12 6.176c.956.004 1.918.129 2.817.379 2.148-1.457 3.09-1.154 3.09-1.154.616 1.55.23 2.695.114 2.98.722.787 1.158 1.792 1.158 3.021 0 4.327-2.632 5.278-5.14 5.557.404.348.764 1.034.764 2.084 0 1.505-.014 2.719-.014 3.088 0 .3.203.651.774.54A11.25 11.25 0 0 0 12 .75Z"/></svg><span>GitHub</span></a>
+        <a class="github-link" href="https://github.com/Bu-Qi/qki-miner-town" target="_blank" rel="noopener noreferrer" title="GitHub 项目仓库（新标签页打开）" aria-label="在新标签页打开 GitHub 项目仓库"><svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M12 .75a11.25 11.25 0 0 0-3.558 21.923c.563.104.77-.244.77-.542 0-.267-.01-.974-.015-1.912-3.13.68-3.79-1.51-3.79-1.51-.511-1.3-1.25-1.646-1.25-1.646-1.022-.7.077-.686.077-.686 1.13.08 1.725 1.16 1.725 1.16 1.005 1.721 2.638 1.224 3.28.936.102-.728.393-1.224.715-1.505-2.5-.285-5.128-1.25-5.128-5.566 0-1.23.44-2.234 1.16-3.021-.116-.285-.503-1.43.11-2.98 0 0 .945-.303 3.094 1.154A10.78 10.78 0 0 1 12 6.176c.956.004 1.918.129 2.817.379 2.148-1.457 3.09-1.154 3.09-1.154.616 1.55.23 2.695.114 2.98.722.787 1.158 1.792 1.158 3.021 0 4.327-2.632 5.278-5.14 5.557.404.348.764 1.034.764 2.084 0 1.505-.014 2.719-.014 3.088 0 .3.203.651.774.54A11.25 11.25 0 0 0 12 .75Z"/></svg><span>GitHub</span></a>
         <span class="saved-state" id="save-state"></span><button class="demo-pill" data-action="help"><span class="status-dot"></span>玩法说明<span class="pill-info">i</span></button><button class="wallet-button" id="wallet-button" data-chain="open">连接 QKI 钱包</button>
       </div>
     </header>

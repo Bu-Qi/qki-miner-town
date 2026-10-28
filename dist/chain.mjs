@@ -78,11 +78,11 @@ export class QkiWallet extends EventTarget {
     this.gasGwei=v;this.persist();this.changed();
   }
   async getArtifact() {
-    if(!this.artifact){const r=await this.fetcher('/contracts/QKIMinerTown.json');if(!r.ok)throw new Error('游戏合约文件加载失败，请刷新重试。');this.artifact=await r.json();}
+    if(!this.artifact){const r=await this.fetcher(new URL('./contracts/QKIMinerTown.json',import.meta.url).href);if(!r.ok)throw new Error('游戏合约文件加载失败，请刷新重试。');this.artifact=await r.json();}
     this.iface ||= new Interface(this.artifact.abi);return this.artifact;
   }
   async getRewardArtifact() {
-    if(!this.rewardArtifact){const r=await this.fetcher('/contracts/QKIRewardsVault.json');if(!r.ok)throw new Error('奖池合约文件加载失败。');this.rewardArtifact=await r.json();}
+    if(!this.rewardArtifact){const r=await this.fetcher(new URL('./contracts/QKIRewardsVault.json',import.meta.url).href);if(!r.ok)throw new Error('奖池合约文件加载失败。');this.rewardArtifact=await r.json();}
     this.rewardIface ||= new Interface(this.rewardArtifact.abi);return this.rewardArtifact;
   }
   async rewardCall(name,args=[],address=this.rewardContract,block='latest') {

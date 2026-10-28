@@ -22,7 +22,7 @@ npm test
 python3 -m http.server 8080 --directory dist
 ```
 
-打开 [http://localhost:8080](http://localhost:8080)。浏览器运行资源已包含在 dist 中，不依赖外部 CDN。页面的资源路径以站点根目录为基准，部署时请将 dist 作为站点根目录。
+打开 [http://localhost:8080](http://localhost:8080)。浏览器运行资源已包含在 dist 中，不依赖外部 CDN。资源使用相对路径，兼容站点根目录和 GitHub Pages 项目子目录。部署时发布 dist 目录的内容。
 
 ## 使用 QKI 链上矿区
 
@@ -77,3 +77,10 @@ ethers 6.17.0 的浏览器版本及 MIT 许可证保留在 dist/vendor 中。构
 新增源码位于 dist/contracts/QKIRewardsVault.sol、dist/rewards-ui.mjs、dist/rewards.css；测试位于 tests/rewards.test.mjs。九项自动化测试覆盖分账、排名、领取、余额守恒、重复领取、重入与拒收、跨季、旧积分排除和钱包支付金额。页面支付流程已在隔离本地 EVM 验证。
 
 当前发布的是页面与代码，主网奖池尚未由助手部署或注资，也未经过第三方独立审计。每笔实际支付与领取均需用户钱包确认，不承诺固定收益。
+
+
+## GitHub Pages 部署
+
+仓库的 Settings → Pages → Build and deployment → Source 选择 GitHub Actions。
+`.github/workflows/pages.yml` 会在 main 分支的 dist 文件或该发布配置变更时自动发布，也可在 Actions 页面手动运行。
+发布内容仅为 dist 目录，不需要安装依赖或重新编译合约。成功后的访问地址以 Pages 设置页和 Actions 部署输出为准。
