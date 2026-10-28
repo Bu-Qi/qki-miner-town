@@ -22,7 +22,7 @@ npm test
 python3 -m http.server 8080 --directory dist
 ```
 
-打开 http://localhost:8080。浏览器运行资源已包含在 dist 中，不依赖外部 CDN。页面的资源路径以站点根目录为基准，部署时请将 dist 作为站点根目录。
+打开 [http://localhost:8080](http://localhost:8080)。浏览器运行资源已包含在 dist 中，不依赖外部 CDN。页面的资源路径以站点根目录为基准，部署时请将 dist 作为站点根目录。
 
 ## 使用 QKI 链上矿区
 
