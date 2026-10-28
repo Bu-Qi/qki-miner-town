@@ -1,4 +1,4 @@
-import { Interface, getAddress, isAddress, keccak256, parseUnits, formatEther, toBeHex } from './vendor/ethers.js';
+import { Interface, getAddress, isAddress, keccak256, parseUnits, formatEther, toQuantity } from './vendor/ethers.js';
 import { createGame, newOrder } from './engine.mjs';
 
 export const QKI = {
@@ -15,6 +15,7 @@ const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 export const shortAddress = a => a ? `${a.slice(0,6)}…${a.slice(-4)}` : '';
 export const qkiAmount = value => Number(formatEther(value)).toLocaleString('en-US', { maximumFractionDigits: 6 });
 export const exactQki = value => formatEther(value);
+export const parseQki = value => parseUnits(String(value).trim(),18);
 export const explorerTx = hash => HASH.test(hash) ? `${QKI.blockExplorerUrls[0]}/tx/${hash}` : '';
 export const explorerAddress = a => isAddress(a) ? `${QKI.blockExplorerUrls[0]}/address/${a}` : '';
 export function qkiChain(id) { try { return BigInt(id) === BigInt(QKI.chainId); } catch { return false; } }
@@ -25,6 +26,7 @@ export function chainError(e) {
   if ([4900,4901].includes(code)) return '钱包连接已断开，请重新连接 QKI 网络。';
   const text = String(e?.shortMessage || e?.message || '连接失败，请稍后重试。');
   const reasons = { INSUFFICIENT_MATERIALS:'链上材料不足，请刷新矿区后再试。', STALE_ORDER:'这张订单已更新，请刷新后交付。', ALREADY_REGISTERED:'这个地址已经有链上矿区，请直接进入。', NOT_REGISTERED:'请先创建这个地址的链上矿区。', NOTHING_TO_COLLECT:'当前区块还没有可收取的资源，请稍等。', NO_FREE_MACHINE:'没有闲置矿机，请先从其他矿场调出。', MAX_LEVEL:'矿场已达到最高等级。', NO_BOOSTS:'本轮的加速次数已用完。', MAX_MACHINES:'矿队已达到 6 台上限。' };
+  Object.assign(reasons,{EPOCH_CHANGED:'赛季已切换，请刷新奖池后重新准备交易。',NOT_ELIGIBLE:'参与门槛：矿区创建满 24 小时，并完成至少 10 张链上订单。',ENROLL_FIRST:'请先报名本赛季，报名后的新增积分才会计入。',ALREADY_ENROLLED:'当前地址已报名本赛季。',NO_NEW_POINTS:'没有尚未同步的新增订单积分。',SEASON_NOT_ENDED:'该赛季尚未结束，结束后才能结算和领取。',ALREADY_SETTLED:'该赛季已结算。',ALREADY_CLAIMED:'这个地址已经领取过该赛季奖励。',NOTHING_TO_CLAIM:'当前没有可领取的金额。',SKIN_ALREADY_OWNED:'当前地址已经拥有金色矿帽。',WRONG_PRICE:'外观价格不匹配，请刷新后再试。',TREASURY_ONLY:'只有合约中记录的运营地址可以领取运营收入。',TRANSFER_FAILED:'收款地址未能接收 QKI，本次领取已回退，权益保留。'});
   for (const [reason,message] of Object.entries(reasons)) if(text.includes(reason)) return message;
   if(/insufficient funds/i.test(text)) return 'QKI 余额不足以支付这笔交易的 Gas。';
   return text.slice(0,180);
@@ -63,11 +65,13 @@ export class QkiWallet extends EventTarget {
     this.provider=null;this.account='';this.chainId='';this.balance=0n;this.walletName='';
     this.contract='';this.verified=false;this.gasGwei='';this.pending=null;this.busy=false;this.generation=0;this.clockOffset=0;this.block=0;this.networkGas='';
     this.listeners=[];
+    this.rewardContract='';this.rewardVerified=false;this.rewardArtifact=null;
     try { const c=JSON.parse(storage?.getItem(CONFIG_KEY)||'{}');if(isAddress(c.contract))this.contract=getAddress(c.contract);if(typeof c.gasGwei==='string'&&/^\d+(\.\d{1,9})?$/.test(c.gasGwei))this.gasGwei=c.gasGwei; } catch {}
-    try { const p=JSON.parse(storage?.getItem(PENDING_KEY)||'null');if(p&&HASH.test(p.hash)&&isAddress(p.from)&&['deploy','game'].includes(p.kind))this.pending=p; } catch {}
+    try { const c=JSON.parse(storage?.getItem(CONFIG_KEY)||'{}');if(isAddress(c.rewardContract))this.rewardContract=getAddress(c.rewardContract); } catch {}
+    try { const p=JSON.parse(storage?.getItem(PENDING_KEY)||'null');if(p&&HASH.test(p.hash)&&isAddress(p.from)&&['deploy','game','rewards-deploy','rewards'].includes(p.kind))this.pending=p; } catch {}
   }
   changed() { this.dispatchEvent(new Event('change')); }
-  persist() { try { this.storage?.setItem(CONFIG_KEY,JSON.stringify({contract:this.contract,gasGwei:this.gasGwei})); } catch {} }
+  persist() { try { this.storage?.setItem(CONFIG_KEY,JSON.stringify({contract:this.contract,rewardContract:this.rewardContract,gasGwei:this.gasGwei})); } catch {} }
   setGas(value) {
     const v=String(value).trim();
     if(v&&(!/^\d+(\.\d{1,9})?$/.test(v)||parseUnits(v,'gwei')<=0n||parseUnits(v,'gwei')>parseUnits('1000000','gwei')))throw new Error('请输入大于 0 的 Gas 单价，最多 9 位小数。');
@@ -76,6 +80,38 @@ export class QkiWallet extends EventTarget {
   async getArtifact() {
     if(!this.artifact){const r=await this.fetcher('/contracts/QKIMinerTown.json');if(!r.ok)throw new Error('游戏合约文件加载失败，请刷新重试。');this.artifact=await r.json();}
     this.iface ||= new Interface(this.artifact.abi);return this.artifact;
+  }
+  async getRewardArtifact() {
+    if(!this.rewardArtifact){const r=await this.fetcher('/contracts/QKIRewardsVault.json');if(!r.ok)throw new Error('奖池合约文件加载失败。');this.rewardArtifact=await r.json();}
+    this.rewardIface ||= new Interface(this.rewardArtifact.abi);return this.rewardArtifact;
+  }
+  async rewardCall(name,args=[],address=this.rewardContract,block='latest') {
+    await this.getRewardArtifact();
+    const raw=await this.provider.request({method:'eth_call',params:[{to:address,data:this.rewardIface.encodeFunctionData(name,args)},block]});
+    return this.rewardIface.decodeFunctionResult(name,raw);
+  }
+  async verifyRewardContract(address) {
+    await this.assertSession();if(!this.verified)await this.verifyContract(this.contract);await this.getRewardArtifact();
+    if(!isAddress(address))throw new Error('请输入有效的奖池合约地址。');
+    const generation=this.generation,game=this.contract,a=getAddress(address);
+    const code=await this.provider.request({method:'eth_getCode',params:[a,'latest']});
+    if(code==='0x'||keccak256(code)!==this.rewardArtifact.runtimeHash)throw new Error('奖池合约代码不匹配。');
+    const config=await this.rewardCall('config',[],a);
+    if(getAddress(config.gameAddress)!==game)throw new Error('该奖池绑定了另一份游戏合约，请核对地址。');
+    if(generation!==this.generation||game!==this.contract)throw new Error('钱包或游戏合约已变化。');
+    this.rewardContract=a;this.rewardVerified=true;this.persist();this.changed();return config;
+  }
+  async readRewards(epoch=null) {
+    await this.assertSession();if(!this.rewardVerified)await this.verifyRewardContract(this.rewardContract);
+    const generation=this.generation,account=this.account,address=this.rewardContract;
+    const block=await this.provider.request({method:'eth_blockNumber'});
+    const config=await this.rewardCall('config',[],address,block);
+    const currentEpoch=Math.floor((Number(config.timestamp)-Number(config.start))/604800);
+    const e=epoch===null?currentEpoch:Number(epoch);
+    if(!Number.isSafeInteger(e)||e<0||e>currentEpoch)throw new Error('请输入已经开始的赛季编号。');
+    const data=await this.rewardCall('overview',[e,account],address,block);
+    if(generation!==this.generation||account!==this.account||address!==this.rewardContract)throw new Error('钱包状态已变化，请刷新奖池。');
+    return {config,data,epoch:e,currentEpoch,account,address};
   }
   async publicRequest(method,params=[]) {
     let error;
@@ -100,7 +136,7 @@ export class QkiWallet extends EventTarget {
   async connect(provider,name='EVM 钱包') {
     if(!provider?.request)throw new Error('未检测到 EVM 钱包，请在钱包内置浏览器或安装钱包的浏览器中打开。');
     this.unbind();this.provider=provider;this.walletName=String(name).slice(0,60);this.generation++;
-    this.account='';this.chainId='';this.balance=0n;this.verified=false;
+    this.account='';this.chainId='';this.balance=0n;this.verified=false;this.rewardVerified=false;
     let accounts;
     try{accounts=await provider.request({method:'eth_requestAccounts'});}
     catch(e){this.provider=null;this.walletName='';this.changed();throw e;}
@@ -110,7 +146,7 @@ export class QkiWallet extends EventTarget {
     if(!this.account)throw new Error('钱包没有提供可用地址。');
   }
   bind() {
-    const invalidate=()=>{this.verified=false;this.generation++;};
+    const invalidate=()=>{this.verified=false;this.rewardVerified=false;this.generation++;};
     const accountsChanged=accounts=>{invalidate();this.account=accounts?.[0]&&isAddress(accounts[0])?getAddress(accounts[0]):'';this.balance=0n;this.changed();this.refresh().catch(()=>{});};
     const chainChanged=id=>{invalidate();this.chainId=id;this.balance=0n;this.changed();this.refresh().catch(()=>{});};
     const disconnected=()=>{invalidate();this.account='';this.chainId='';this.balance=0n;this.changed();};
@@ -118,7 +154,7 @@ export class QkiWallet extends EventTarget {
     for(const [name,fn] of this.listeners)this.provider?.on?.(name,fn);
   }
   unbind() { for(const [name,fn] of this.listeners)this.provider?.removeListener?.(name,fn);this.listeners=[]; }
-  disconnect() { this.unbind();this.provider=null;this.account='';this.chainId='';this.balance=0n;this.verified=false;this.generation++;this.changed(); }
+  disconnect() { this.unbind();this.provider=null;this.account='';this.chainId='';this.balance=0n;this.verified=false;this.rewardVerified=false;this.generation++;this.changed(); }
   async switchChain() {
     if(!this.provider)throw new Error('请先连接钱包。');
     try { await this.provider.request({method:'wallet_switchEthereumChain',params:[{chainId:QKI.chainId}]}); }
@@ -130,7 +166,7 @@ export class QkiWallet extends EventTarget {
       await this.provider.request({method:'wallet_switchEthereumChain',params:[{chainId:QKI.chainId}]});
     }
     this.chainId=await this.provider.request({method:'eth_chainId'});
-    this.generation++;this.verified=false;
+    this.generation++;this.verified=false;this.rewardVerified=false;
     if(!qkiChain(this.chainId))throw new Error('钱包尚未切换到 QKI 主网。');
     await this.refresh();this.changed();
   }
@@ -156,6 +192,7 @@ export class QkiWallet extends EventTarget {
     const code=await this.provider.request({method:'eth_getCode',params:[a,'latest']});
     if(code==='0x'||keccak256(code)!==this.artifact.runtimeHash)throw new Error('该地址不是此版本的矿工小镇合约，请检查网络和地址。');
     if(generation!==this.generation||account!==this.account)throw new Error('账户或网络已变化，请重新连接合约。');
+    if(this.contract!==a)this.rewardVerified=false;
     this.contract=a;this.verified=true;this.persist();this.changed();return a;
   }
   async readPlayer(prefs={}) {
@@ -171,15 +208,27 @@ export class QkiWallet extends EventTarget {
     await this.assertSession();await this.getArtifact();
     if(this.pending)throw new Error('有一笔交易仍待确认，请先查看交易状态。');
     if(name!=='deploy'&&!this.verified)await this.verifyContract(this.contract);
-    const context={from:this.account,generation:this.generation};
     const data=name==='deploy'?this.artifact.bytecode:this.iface.encodeFunctionData(name,args);
-    const tx={from:this.account,data,value:'0x0',chainId:QKI.chainId};if(name!=='deploy')tx.to=this.contract;
+    return this.estimateDraft({name,label,kind:name==='deploy'?'deploy':'game',data,to:name==='deploy'?null:this.contract,value:0n});
+  }
+  async prepareReward(name,args=[],label='奖池操作',value=0n) {
+    await this.assertSession();if(!this.verified)await this.verifyContract(this.contract);await this.getRewardArtifact();
+    if(name!=='deploy'&&!this.rewardVerified)await this.verifyRewardContract(this.rewardContract);
+    const allowed=['deploy','sponsor','buySkin','enroll','sync','settle','claim','withdrawProject'];
+    if(!allowed.includes(name))throw new Error('不支持的奖池操作。');
+    const data=name==='deploy'?this.rewardArtifact.bytecode+this.rewardIface.encodeDeploy([this.contract,...args]).slice(2):this.rewardIface.encodeFunctionData(name,args);
+    return this.estimateDraft({name,label,kind:name==='deploy'?'rewards-deploy':'rewards',data,to:name==='deploy'?null:this.rewardContract,value:BigInt(value),gameAddress:this.contract});
+  }
+  async estimateDraft({name,label,kind,data,to,value,gameAddress}) {
+    if(this.pending)throw new Error('有交易尚未确认，请先查看状态。');
+    const context={from:this.account,generation:this.generation};
+    const tx={from:this.account,data,value:toQuantity(value),chainId:QKI.chainId};if(to)tx.to=to;
     const price=this.gasGwei?parseUnits(this.gasGwei,'gwei'):BigInt(await this.provider.request({method:'eth_gasPrice'}));
-    const estimate=BigInt(await this.provider.request({method:'eth_estimateGas',params:[{...tx,gasPrice:toBeHex(price)}]}));
+    const estimate=BigInt(await this.provider.request({method:'eth_estimateGas',params:[{...tx,gasPrice:toQuantity(price)}]}));
     const gas=(estimate*120n+99n)/100n;
     const balance=BigInt(await this.provider.request({method:'eth_getBalance',params:[context.from,'latest']}));
     await this.assertSession(context);
-    return {...context,kind:name==='deploy'?'deploy':'game',name,label,issuedAt:Date.now(),tx:{...tx,gas:toBeHex(gas),gasPrice:toBeHex(price)},gas,price,maxFee:gas*price,balance,sufficient:balance>=gas*price};
+    return {...context,kind,name,label,gameAddress,issuedAt:Date.now(),tx:{...tx,gas:toQuantity(gas),gasPrice:toQuantity(price)},gas,price,maxFee:gas*price,maxDebit:gas*price+value,balance,sufficient:balance>=gas*price+value};
   }
   async send(prepared) {
     if(this.busy||this.pending)throw new Error('交易正在处理中，请勿重复提交。');
@@ -187,11 +236,13 @@ export class QkiWallet extends EventTarget {
     try {
       await this.assertSession(prepared);
       if(Date.now()-prepared.issuedAt>120000)throw new Error('这份 Gas 估算已过期，请重新准备交易。');
-      if(!prepared.sufficient)throw new Error('QKI 余额不足以支付 Gas。');
-      if(prepared.kind!=='deploy'&&prepared.tx.to!==this.contract)throw new Error('游戏合约已变化，请重新准备交易。');
+      if(!prepared.sufficient)throw new Error('QKI 余额不足以支付金额及 Gas。');
+      if(prepared.kind==='game'&&prepared.tx.to!==this.contract)throw new Error('游戏合约已变化，请重新准备交易。');
+      if(prepared.kind==='rewards'&&prepared.tx.to!==this.rewardContract)throw new Error('奖池合约已变化，请重新准备交易。');
+      if(prepared.gameAddress&&prepared.gameAddress!==this.contract)throw new Error('奖池绑定的游戏合约已变化。');
       const hash=await this.provider.request({method:'eth_sendTransaction',params:[prepared.tx]});
       if(!HASH.test(hash))throw new Error('钱包未返回有效交易哈希，请在钱包中核对交易状态。');
-      this.pending={hash,from:prepared.from,kind:prepared.kind,label:prepared.label,to:prepared.tx.to||'',created:Date.now()};
+      this.pending={hash,from:prepared.from,kind:prepared.kind,label:prepared.label,to:prepared.tx.to||'',gameAddress:prepared.gameAddress||'',created:Date.now()};
       try{this.storage?.setItem(PENDING_KEY,JSON.stringify(this.pending));}catch{}
       this.changed();return hash;
     } finally { this.busy=false;this.changed(); }
@@ -210,6 +261,13 @@ export class QkiWallet extends EventTarget {
       const code=await this.request('eth_getCode',[receipt.contractAddress,'latest']);
       if(keccak256(code)!==this.artifact.runtimeHash)throw new Error('部署后的合约代码与游戏版本不符。');
       this.contract=getAddress(receipt.contractAddress);this.verified=!!this.account&&qkiChain(this.chainId);this.persist();
+    }
+    if(ok&&pending.kind==='rewards-deploy'){
+      if(!receipt.contractAddress||!isAddress(receipt.contractAddress))throw new Error('回执未包含奖池合约地址。');
+      await this.getRewardArtifact();
+      const code=await this.request('eth_getCode',[receipt.contractAddress,'latest']);
+      if(keccak256(code)!==this.rewardArtifact.runtimeHash)throw new Error('部署后的奖池代码不匹配。');
+      this.rewardContract=getAddress(receipt.contractAddress);this.rewardVerified=!!this.account&&qkiChain(this.chainId)&&pending.gameAddress===this.contract;this.persist();
     }
     if(this.pending?.hash===pending.hash){this.pending=null;try{this.storage?.removeItem(PENDING_KEY);}catch{}}
     this.changed();return {status:ok?'confirmed':'reverted',hash:pending.hash,kind:pending.kind,from:pending.from,receipt};

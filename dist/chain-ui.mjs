@@ -2,7 +2,7 @@ import { QKI, QkiWallet, discoverWallets, shortAddress, qkiAmount, exactQki, qki
 import { icon } from './art.mjs';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-export function createChainUI({ openDialog, closeDialog, toast, render, enter, leave, prefs, getState, isOnchain }) {
+export function createChainUI({ openDialog, closeDialog, toast, render, enter, leave, prefs, getState, isOnchain, onRewardReceipt = async()=>{} }) {
   let storage;try{storage=localStorage;}catch{}
   const wallet=new QkiWallet({storage});
   const wallets=discoverWallets();
@@ -35,15 +35,15 @@ export function createChainUI({ openDialog, closeDialog, toast, render, enter, l
     return `<section class="card chain-card"><span class="section-kicker">QKI NETWORK</span><div class="card-heading"><h2>网络信息</h2><span class="count-label">主网</span></div><dl class="network-facts"><div><dt>Chain ID</dt><dd>20181205</dd></div><div><dt>原生币</dt><dd>QKI</dd></div><div><dt>节点区块</dt><dd>${wallet.block?wallet.block.toLocaleString('en-US'):'点击刷新读取'}</dd></div><div><dt>节点 Gas 单价</dt><dd>${wallet.networkGas?esc(wallet.networkGas)+' gwei':'—'}</dd></div></dl><button class="btn btn-outline btn-small btn-full" data-chain="network">刷新节点状态${icon('reset')}</button></section><section class="card chain-card"><h2>交易 Gas</h2><p class="chain-copy">默认跟随钱包节点报价；也可以指定单价。</p><label class="field-label" for="gas-gwei">自定义 Gas 单价 / gwei</label><div class="contract-input-row"><input id="gas-gwei" class="chain-input" inputmode="decimal" value="${esc(wallet.gasGwei)}" placeholder="自动，可填 500 / 1000"><button class="btn btn-outline btn-small" data-chain="gas">保存</button></div><p class="chain-fine-print">发送前会展示 Gas 估算和费用上限，最终以钱包确认及交易回执为准。</p></section><section class="card chain-card"><h2>链上记录什么？</h2><ul class="chain-feature-list"><li>${icon('check')}材料与制造成品</li><li>${icon('check')}矿机分配与矿场等级</li><li>${icon('check')}订单积分与成长进度</li></ul><p class="chain-fine-print">当前合约中的资源是游戏数值，没有 QKI 兑换、提现或 NFT 转出功能。</p>${link()}</section>`;
   }
   function cancelDraft(){prepared=null;draftGeneration++;}
-  async function request(name,args,label) {
+  async function request(name,args,label,scope='game',value=0n) {
     if(preparing||wallet.busy||wallet.pending)throw new Error('有一笔交易正在处理中，请先等待确认。');
     preparing=true;prepared=null;const job=++draftGeneration;
     openDialog('准备链上操作',`<div class="tx-preparing">${icon('clock')}<strong>正在模拟执行并估算 Gas…</strong><p>请稍等，准备完成后再由你确认。</p></div>`);
     try {
-      const draft=await wallet.prepare(name,args,label);
+      const draft=scope==='rewards'?await wallet.prepareReward(name,args,label,value):await wallet.prepare(name,args,label);
       if(!document.querySelector('#game-dialog[open]')||job!==draftGeneration)return;
       prepared=draft;
-      openDialog(name==='deploy'?'部署游戏合约':'确认链上操作',`<p>${esc(label)}。请核对网络、地址和预计费用。</p><dl class="tx-summary"><div><dt>网络</dt><dd>QKI 主网 · 20181205</dd></div><div><dt>操作</dt><dd>${esc(label)}</dd></div><div><dt>发起地址</dt><dd>${esc(shortAddress(draft.from))}</dd></div><div><dt>合约</dt><dd>${name==='deploy'?'部署新合约':esc(shortAddress(draft.tx.to))}</dd></div><div><dt>转入合约金额</dt><dd>0 QKI</dd></div><div><dt>Gas 上限（含余量）</dt><dd>${draft.gas.toLocaleString('en-US')}</dd></div><div><dt>Gas 单价</dt><dd>${Number(draft.price)/1e9} gwei</dd></div><div class="tx-total"><dt>网络费用上限</dt><dd>${exactQki(draft.maxFee)} QKI</dd></div></dl><p class="chain-fine-print">未使用的 Gas 不会收取。只有你在钱包确认后才会提交交易。</p>${draft.sufficient?'':'<div class="info-box tx-warning">当前 QKI 余额不足以支付此费用上限。</div>'}<button class="btn btn-primary btn-full" data-chain="confirm" ${draft.sufficient?'':'disabled'}>${icon('wallet')}在钱包中确认</button><button class="btn btn-outline btn-full" data-chain="cancel">取消</button>`);
+      openDialog(name==='deploy'?(scope==='rewards'?'部署奖池合约':'部署游戏合约'):'确认链上操作',`<p>${esc(label)}。请核对网络、地址和预计费用。</p><dl class="tx-summary"><div><dt>网络</dt><dd>QKI 主网 · 20181205</dd></div><div><dt>操作</dt><dd>${esc(label)}</dd></div><div><dt>发起地址</dt><dd>${esc(shortAddress(draft.from))}</dd></div><div><dt>合约</dt><dd>${name==='deploy'?'部署新合约':esc(shortAddress(draft.tx.to))}</dd></div><div><dt>支付至合约</dt><dd>${exactQki(BigInt(draft.tx.value))} QKI</dd></div><div><dt>Gas 上限（含余量）</dt><dd>${draft.gas.toLocaleString('en-US')}</dd></div><div><dt>Gas 单价</dt><dd>${Number(draft.price)/1e9} gwei</dd></div><div class="tx-total"><dt>网络费用上限</dt><dd>${exactQki(draft.maxFee)} QKI</dd></div></dl><p class="chain-fine-print">支付金额与网络 Gas 分别计算。${draft.name==='sponsor'?'赞助会全部进入奖池，不可撤回。':draft.name==='buySkin'?'购买的是永久金色矿帽外观，不增加奖励权重。':''}未使用的 Gas 不会收取；只有你在钱包确认后才会提交。</p>${draft.sufficient?'':'<div class="info-box tx-warning">当前 QKI 余额不足以支付金额与 Gas 上限。</div>'}<button class="btn btn-primary btn-full" data-chain="confirm" ${draft.sufficient?'':'disabled'}>${icon('wallet')}在钱包中确认</button><button class="btn btn-outline btn-full" data-chain="cancel">取消</button>`);
     } catch(e){closeDialog();throw e;}finally{preparing=false;}
   }
   async function refreshPlayer(activate=false) {
@@ -57,10 +57,11 @@ export function createChainUI({ openDialog, closeDialog, toast, render, enter, l
     try {
       const result=await wallet.waitPending();
       if(result?.status==='confirmed'){
-        toast(result.kind==='deploy'?'游戏合约已部署，地址已保存。':'QKI 交易已确认，正在读取矿区。','check');
+        toast(result.kind==='deploy'?'游戏合约已部署，地址已保存。':result.kind==='rewards-deploy'?'奖池合约已部署，地址已保存。':'QKI 交易已确认，正在读取最新数据。','check');
         if(wallet.account&&qkiChain(wallet.chainId)){
           await wallet.refresh();
-          if(result.kind==='deploy')render();
+          if(result.kind.startsWith('rewards'))await onRewardReceipt(result);
+          else if(result.kind==='deploy')render();
           else if(result.from===wallet.account)await refreshPlayer(true);
         }
       }else if(result?.status==='reverted')toast('交易执行失败，材料与进度未改变；网络仍会收取已使用的 Gas。','help');
@@ -94,7 +95,7 @@ export function createChainUI({ openDialog, closeDialog, toast, render, enter, l
         closeDialog();toast('请在钱包中核对并确认交易。','wallet');
         await wallet.send(draft);toast('交易已提交，确认前不会改变矿区进度。','clock');render();watch();return;
       }else if(name==='check'){
-        if(watching){const result=await wallet.checkPending();if(result?.status==='confirmed'){await wallet.refresh();if(result.from===wallet.account&&result.kind!=='deploy')await refreshPlayer(true);toast('交易已确认。','check');}else if(result?.status==='reverted')toast('交易执行失败，请查看交易回执。','help');else toast('交易仍待确认。','clock');}
+        if(watching){const result=await wallet.checkPending();if(result?.status==='confirmed'){await wallet.refresh();if(result.kind.startsWith('rewards'))await onRewardReceipt(result);else if(result.from===wallet.account&&result.kind==='game')await refreshPlayer(true);toast('交易已确认。','check');}else if(result?.status==='reverted')toast('交易执行失败，请查看交易回执。','help');else toast('交易仍待确认。','clock');}
         else watch();
       }else if(name==='copy-hash'){await navigator.clipboard.writeText(wallet.pending?.hash||'');toast('交易哈希已复制。','check');}
       header();render();
@@ -106,5 +107,5 @@ export function createChainUI({ openDialog, closeDialog, toast, render, enter, l
   document.addEventListener('click',e=>{const el=e.target.closest('[data-chain]');if(el&&!el.disabled)action(el.dataset.chain,el);});
   window.addEventListener('qki:wallets',()=>{if(location.hash==='#chain'&&!document.querySelector('dialog[open]'))render();});
   header();
-  return {wallet,view,side,modeBar,busy,gameAction,cancelDraft,header,refreshPlayer,checkPending:watch};
+  return {wallet,view,side,modeBar,busy,gameAction,cancelDraft,header,refreshPlayer,checkPending:watch,requestReward:(name,args,label,value=0n)=>request(name,args,label,'rewards',value)};
 }

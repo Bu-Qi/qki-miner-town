@@ -1,6 +1,7 @@
 import { SAVE_KEY, ITEMS, MINES, RECIPES, MILESTONES, createGame, loadGame, advance, capacity, output, canAfford, collect, craft, upgradeCost, upgrade, assign, deliver, expand, boost, guideStep } from './engine.mjs';
 import { icon, itemIcon, scene } from './art.mjs';
 import { createChainUI } from './chain-ui.mjs';
+import { createRewardsUI } from './rewards-ui.mjs';
 
 const $ = q => document.querySelector(q);
 let storageOK = true;
@@ -10,6 +11,7 @@ let state = rawSave ? loadGame(rawSave) : createGame();
 let localState = state;
 let chainMode = false;
 let chainUI;
+let rewardsUI;
 let chainRefreshing = false;
 const advanceGame = () => advance(state, Date.now() + (chainMode ? chainUI.wallet.clockOffset : 0));
 const CHAIN_ACTIONS = new Set(['collect-all','collect','craft','assign-minus','assign-plus','upgrade','deliver','expand','boost']);
@@ -20,6 +22,7 @@ const VIEWS = {
   season: { name: '成长手册', short: '成长', icon: 'crown', title: '每一点进步，都算数。', subtitle: '交付订单、积累积分，留下属于你的山谷足迹。' },
   inventory: { name: '我的仓库', short: '仓库', icon: 'box', title: '努力，装得满满当当。', subtitle: '把材料存好，把下一次升级安排好。' },
   chain: { name: 'QKI 链上矿区', short: '链上', icon: 'wallet', title: '你的小镇，连接 QKI。', subtitle: '连接钱包，读取真实余额，让游戏进度由链上合约记录。' },
+  rewards: { name: '赛季奖池与贡献分配', short: '奖池', icon: 'crown', title: '一起建设，一起分享。', subtitle: '实际收入支持的赛季奖励与活跃贡献分配。' },
 };
 let view = VIEWS[location.hash.slice(1)] ? location.hash.slice(1) : 'home';
 let lastSave = 0;
@@ -129,7 +132,7 @@ function inventory() {
 }
 function season() {
   const next=MILESTONES.find(m=>m.score>state.score);
-  return `<section class="season-hero"><div class="eyebrow">YOUR STORY IN MORNING VALLEY</div><h2>山谷的成长手册</h2><p>每一张订单，都会成为你在这里生活过的证明。</p><div class="season-score">${fmt(state.score)}<small>累计订单积分</small></div><div class="progress-track"><div class="progress-fill" style="width:${Math.min(100,state.score/500*100)}%"></div></div><p>${next?`距离「${next.title}」还有 ${next.score-state.score} 积分`:'全部成长徽章已点亮。山谷的故事，还在继续。'}</p></section><div class="section-heading"><h2>你的成长足迹</h2><span class="subtle">${MILESTONES.filter(m=>state.score>=m.score).length} / 4 枚徽章已点亮</span></div><section class="milestones">${MILESTONES.map(m=>`<article class="milestone ${state.score>=m.score?'unlocked':''}"><div class="milestone-icon">${icon(m.icon)}</div><div><h3>${m.title}</h3><p>${m.desc}</p></div><div class="milestone-status"><strong>${state.score>=m.score?icon('check'):`${m.score} 积分`}</strong>${state.score>=m.score?'已解锁':'等待点亮'}</div></article>`).join('')}</section><div class="note-card">${icon('shield')}<span>${chainMode?'成长手册展示该钱包在 QKI 合约中的订单积分。徽章为游戏内成就，当前没有 QKI 奖池。':'成长手册展示你自己的试玩记录。徽章为游戏内成就；本版本没有真实 QKI 奖池或链上排行榜。'}</span></div>`;
+  return `<section class="season-hero"><div class="eyebrow">YOUR STORY IN MORNING VALLEY</div><h2>山谷的成长手册</h2><p>每一张订单，都会成为你在这里生活过的证明。</p><div class="season-score">${fmt(state.score)}<small>累计订单积分</small></div><div class="progress-track"><div class="progress-fill" style="width:${Math.min(100,state.score/500*100)}%"></div></div><p>${next?`距离「${next.title}」还有 ${next.score-state.score} 积分`:'全部成长徽章已点亮。山谷的故事，还在继续。'}</p></section><div class="section-heading"><h2>你的成长足迹</h2><span class="subtle">${MILESTONES.filter(m=>state.score>=m.score).length} / 4 枚徽章已点亮</span></div><section class="milestones">${MILESTONES.map(m=>`<article class="milestone ${state.score>=m.score?'unlocked':''}"><div class="milestone-icon">${icon(m.icon)}</div><div><h3>${m.title}</h3><p>${m.desc}</p></div><div class="milestone-status"><strong>${state.score>=m.score?icon('check'):`${m.score} 积分`}</strong>${state.score>=m.score?'已解锁':'等待点亮'}</div></article>`).join('')}</section><div class="note-card">${icon('shield')}<span>${chainMode?'成长手册展示该钱包的累计订单积分；赛季奖池只统计报名后同步的新增积分，详见「奖池」。':'成长手册展示你自己的试玩记录。试玩积分不参与链上奖池，赛季规则请查看「奖池」。'}</span></div>`;
 }
 function render() {
   const active = document.activeElement;
@@ -140,10 +143,10 @@ function render() {
   $('#page-title').innerHTML=VIEWS[view].title;
   $('#page-subtitle').textContent=VIEWS[view].subtitle;
   $('#player-level').textContent=`矿工等级 LV.${String(1+Math.floor(state.score/100)).padStart(2,'0')}`;
-  resources();$('#resources').hidden=view==='chain';
-  $('#mode-bar').innerHTML=view==='chain'?'':chainUI.modeBar();
-  $('#view-content').innerHTML=view==='chain'?chainUI.view():({home,workshop,orders:ordersView,season,inventory})[view]();
-  $('#right-content').innerHTML=view==='chain'?chainUI.side():rightSide();
+  resources();$('#resources').hidden=['chain','rewards'].includes(view);
+  $('#mode-bar').innerHTML=['chain','rewards'].includes(view)?'':chainUI.modeBar();
+  $('#view-content').innerHTML=view==='rewards'?rewardsUI.view():view==='chain'?chainUI.view():({home,workshop,orders:ordersView,season,inventory})[view]();
+  $('#right-content').innerHTML=view==='rewards'?rewardsUI.side():view==='chain'?chainUI.side():rightSide();
   if(chainMode&&chainUI.busy())document.querySelectorAll('[data-action]').forEach(el=>{if(CHAIN_ACTIONS.has(el.dataset.action))el.disabled=true;});
   updateLive();
   if(focusAction&&!dialog.open){
@@ -173,7 +176,7 @@ function openDialog(title,body) {
   if(!dialog.open)dialog.showModal();
 }
 function help() {
-  openDialog('欢迎来到晨曦矿谷',`<p>这是「QKI 矿工小镇」的第一版免费试玩。安排矿机，制造设备，用你自己的节奏建设一座小镇。</p><div class="help-step"><span>01</span><div><h3>采集与调度</h3><p>三个矿场自动生产。点击矿场或「一键收取」，资源进入仓库。用 − / + 调整矿机分配。</p></div></div><div class="help-step"><span>02</span><div><h3>制造与升级</h3><p>在工坊熔炼合金、打造零件。升级矿场能增加产量；制造精密钻机可以扩建矿队。</p></div></div><div class="help-step"><span>03</span><div><h3>订单与成长</h3><p>交付材料获得积分，解锁成长徽章。订单长期有效，你可以先留材料升级。</p></div></div><div class="info-box"><strong>关于 QKI 版本</strong><br>你可以免费试玩，也可以在「链上」页面连接 QKI 钱包。链上矿区的采集、制造、升级和订单由合约执行，交易需要支付 QKI Gas。两种矿区分别保存，试玩资源不会导入链上。<br>离开页面也会积累产出，最多结算 4 小时，并受矿场待收取容量限制。</div><button class="btn btn-primary btn-full" data-action="dialog-close">开始我的小镇${icon('arrow')}</button>`);
+  openDialog('欢迎来到晨曦矿谷',`<p>这是「QKI 矿工小镇」的第一版免费试玩。安排矿机，制造设备，用你自己的节奏建设一座小镇。</p><div class="help-step"><span>01</span><div><h3>采集与调度</h3><p>三个矿场自动生产。点击矿场或「一键收取」，资源进入仓库。用 − / + 调整矿机分配。</p></div></div><div class="help-step"><span>02</span><div><h3>制造与升级</h3><p>在工坊熔炼合金、打造零件。升级矿场能增加产量；制造精密钻机可以扩建矿队。</p></div></div><div class="help-step"><span>03</span><div><h3>订单与成长</h3><p>交付材料获得积分，解锁成长徽章。订单长期有效，你可以先留材料升级。</p></div></div><div class="info-box"><strong>关于 QKI 版本</strong><br>你可以免费试玩，也可以在「链上」页面连接 QKI 钱包。链上矿区的采集、制造、升级和订单由合约执行，交易需要支付 QKI Gas。两种矿区分别保存，试玩资源不会导入链上。「奖池」可连接独立模块，以已到账的外观销售收入与赞助支持赛季奖励。<br>离开页面也会积累产出，最多结算 4 小时，并受矿场待收取容量限制。</div><button class="btn btn-primary btn-full" data-action="dialog-close">开始我的小镇${icon('arrow')}</button>`);
 }
 function upgradeInfo(id) {
   if(!MINES[id])return;
@@ -257,7 +260,8 @@ dialog.addEventListener('click',e=>{if(e.target===dialog){const r=dialog.getBoun
 document.addEventListener('visibilitychange',()=>{advanceGame();if(!document.hidden)updateLive();save();});
 window.addEventListener('pagehide',()=>{advanceGame();save();});
 for(const [target,glyph] of [['#brand-icon','pick'],['#leaf-icon','sprout'],['#help-icon','help'],['#settings-icon','settings'],['#map-icon','leaf']])$(target).innerHTML=icon(glyph);
-chainUI=createChainUI({openDialog,closeDialog:()=>dialog.close(),toast,render,enter:enterChain,leave:leaveChain,prefs:()=>localState,getState:()=>state,isOnchain:()=>chainMode});
+chainUI=createChainUI({openDialog,closeDialog:()=>dialog.close(),toast,render,enter:enterChain,leave:leaveChain,prefs:()=>localState,getState:()=>state,isOnchain:()=>chainMode,onRewardReceipt:result=>rewardsUI?.onReceipt(result)});
+rewardsUI=createRewardsUI({chainUI,render,toast,getView:()=>view,navigate});
 render();save();
 setInterval(()=>{advanceGame();updateLive();if(Date.now()-lastSave>5000&&storageOK)save();},500);
 setInterval(async()=>{if(!chainMode||chainRefreshing||chainUI.busy()||dialog.open||document.activeElement?.matches('input,select'))return;chainRefreshing=true;try{await chainUI.refreshPlayer();}catch{}finally{chainRefreshing=false;}},15000);
